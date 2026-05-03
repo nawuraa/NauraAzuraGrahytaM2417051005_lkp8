@@ -1,62 +1,30 @@
 package com.example.tampraktikum
 
-import com.example.tampraktikum.model.Food
-import com.example.tampraktikum.model.FoodSource
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.*
+import coil.compose.AsyncImage
+import com.example.tampraktikum.model.Food
 import com.example.tampraktikum.network.RetrofitClient
 import com.example.tampraktikum.ui.theme.TAMPraktikumTheme
 import kotlinx.coroutines.delay
@@ -66,6 +34,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             TAMPraktikumTheme {
                 val navController = rememberNavController()
@@ -76,24 +45,29 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppNavigation(navController: NavController) {
+fun AppNavigation(navController: NavHostController) {
     var foods by remember { mutableStateOf<List<Food>>(emptyList()) }
 
-    NavHost(
-        navController = navController as androidx.navigation.NavHostController,
-        startDestination = "home"
-    ) {
+    NavHost(navController = navController, startDestination = "home") {
         composable("home") {
-            DaftarMakananScreen(navController) { fetchedFoods ->
-                foods = fetchedFoods
-            }
+            DaftarMakananScreen(
+                navController = navController,
+                onFoodsLoaded = { foods = it }
+            )
         }
+
         composable("detail/{nama}") { backStackEntry ->
             val nama = backStackEntry.arguments?.getString("nama")
             val food = foods.find { it.nama == nama }
+
             if (food != null) {
-                Box(modifier = Modifier.padding(16.dp)){
-                    DetailScreen(food = food, navController = navController, isFullScreen = true)
+                DetailScreen(food, navController, true)
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Data tidak ditemukan", color = Color.Red)
                 }
             }
         }
@@ -101,9 +75,13 @@ fun AppNavigation(navController: NavController) {
 }
 
 @Composable
-fun DaftarMakananScreen(navController: NavController, onFoodsLoaded: (List<Food>) -> Unit = {}) {
+fun DaftarMakananScreen(
+    navController: NavController,
+    onFoodsLoaded: (List<Food>) -> Unit = {}
+) {
     var foods by remember { mutableStateOf<List<Food>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var isError by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         try {
@@ -112,45 +90,62 @@ fun DaftarMakananScreen(navController: NavController, onFoodsLoaded: (List<Food>
             isLoading = false
         } catch (e: Exception) {
             isLoading = false
+            isError = true
         }
     }
 
-    if (isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            item {
-                Text(
-                    text = "Rekomendasi Populer",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.Black
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(foods) { food ->
-                        FoodRowItem(food = food, navController = navController)
-                    }
-                }
-                Spacer(modifier = Modifier.height(45.dp))
-                Text(
-                    text = "Daftar Menu Lengkap",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.Black
-                )
+    when {
+        isLoading -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
             }
+        }
 
-            items(foods) { food ->
-                DetailScreen(food = food, navController = navController, isFullScreen = false)
+        isError || foods.isEmpty() -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Gagal Memuat Data", color = Color.Red)
+            }
+        }
+
+        else -> {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Rekomendasi Populer",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(foods) { food ->
+                            FoodRowItem(food, navController)
+                        }
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+
+                    Text(
+                        text = "Daftar Menu Lengkap",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
+
+                items(foods) { food ->
+                    DetailScreen(food, navController, false)
+                }
             }
         }
     }
@@ -158,158 +153,102 @@ fun DaftarMakananScreen(navController: NavController, onFoodsLoaded: (List<Food>
 
 @Composable
 fun FoodRowItem(food: Food, navController: NavController) {
-    val context = LocalContext.current
-    val resId = FoodSource.getResourceId(context, food.imageName)
-    val imageRes = if (resId != 0) resId else R.drawable.rendang
-
     Card(
         modifier = Modifier
             .width(160.dp)
             .clickable {
-                navController.navigate("detail/${food.nama}")
+                navController.navigate("detail/${Uri.encode(food.nama)}")
             },
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column {
-            Image(
-                painter = painterResource(id = imageRes),
+            AsyncImage(
+                model = food.imageUrl,
                 contentDescription = food.nama,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(100.dp),
                 contentScale = ContentScale.Crop
             )
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(
-                    text = food.nama,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Rp ${food.harga}",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodySmall
-                )
+
+            Column(Modifier.padding(8.dp)) {
+                Text(food.nama, fontWeight = FontWeight.Bold)
+                Text("Rp ${food.harga}", color = MaterialTheme.colorScheme.primary)
             }
         }
     }
 }
 
 @Composable
-fun DetailScreen(food: Food, navController: NavController, isFullScreen: Boolean = false) {
-    var isFavorite by remember { mutableStateOf(false) }
+fun DetailScreen(
+    food: Food,
+    navController: NavController,
+    isFullScreen: Boolean
+) {
     var isLoading by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
-    val resId = FoodSource.getResourceId(context, food.imageName)
-    val imageRes = if (resId != 0) resId else R.drawable.rendang
+
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
 
     Box(modifier = Modifier.fillMaxWidth()) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+            shape = RoundedCornerShape(16.dp)
         ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                Box {
-                    Image(
-                        painter = painterResource(id = imageRes),
-                        contentDescription = food.nama,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                    IconButton(
-                        onClick = { isFavorite = !isFavorite },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "Favorite Icon",
-                            tint = if (isFavorite) Color.Red else Color.White
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = food.nama,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+            Column(Modifier.padding(12.dp)) {
+                AsyncImage(
+                    model = food.imageUrl,
+                    contentDescription = food.nama,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = food.deskripsi,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Harga: Rp ${food.harga}",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(food.nama, fontWeight = FontWeight.Bold)
+                Text(food.deskripsi)
+                Text("Rp ${food.harga}", color = MaterialTheme.colorScheme.primary)
+
+                Spacer(Modifier.height(12.dp))
 
                 if (isFullScreen) {
                     Button(
                         onClick = {
-                            coroutineScope.launch {
+                            scope.launch {
                                 isLoading = true
                                 delay(2000)
-                                snackbarHostState.showSnackbar(
-                                    "Pesanan ${food.nama} berhasil diproses!"
-                                )
+                                snackbar.showSnackbar("Pesanan berhasil!")
                                 isLoading = false
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoading
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Memproses...")
-                        } else {
-                            Text("Pesan Sekarang")
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = { navController.popBackStack() },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoading
-                    ) {
-                        Text("Kembali")
-                    }
-                } else {
-                    Button(
-                        onClick = {
-                            navController.navigate("detail/${food.nama}")
-                        },
+                        enabled = !isLoading,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Pesan")
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                        } else {
+                            Text("Pesan")
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Button(
+                        onClick = { navController.popBackStack() },
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Kembali")
                     }
                 }
             }
         }
+
         SnackbarHost(
-            hostState = snackbarHostState,
+            hostState = snackbar,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
